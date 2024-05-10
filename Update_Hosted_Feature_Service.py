@@ -3,6 +3,7 @@ from arcgis import features
 import pandas as pd
 from arcgis import geometry #use geometry module to project Long,Lat to X and Y
 from copy import copy
+from cooy import deepcopy
 from datetime import datetime
 import configparser
 import os
@@ -90,11 +91,6 @@ feature_layer.edit_features(updates= features_for_update)
 new_rows = df_1[~df_1['your_unique_id'].isin(overlap_rows['your_unique_id'])]
 print(new_rows.shape)
 new_rows.head()
-
-
-from copy import deepcopy
-from datetime import datetime
-from arcgis import geometry
 
 features_to_be_added = []
 print("Number of rows in new_rows:", len(new_rows))  # Diagnostic print statement
