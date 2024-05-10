@@ -7,6 +7,6 @@ The query layer is created from an SDE connection file which must be generated b
 
 The mentioned config file store portal authentication can be created in a text file and saved as config.ini. This file must contain the following:
 [portal]
-url = https://gis.jeffcom911.org/portal
+url = your/url
 username = your_username
 password = your_password
