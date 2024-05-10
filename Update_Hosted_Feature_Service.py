@@ -122,10 +122,10 @@ if not new_rows.empty:
         feature_layer.edit_features(adds=features_to_be_added)
         print("Features added successfully.")  # Diagnostic print statement
 
-print("End of script.")  # Diagnostic print statement
+print("End of adds update.")  # Diagnostic print statement
 
 
-# Now perform the operation
+# Now perform deletes
 print(incident_fset.sdf.shape) 
 delete_rows = incident_fset.sdf[~incident_fset.sdf['your_unique_id'].isin(overlap_rows['your_unique_id'])]
 
