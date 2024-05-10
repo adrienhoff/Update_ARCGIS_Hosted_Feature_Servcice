@@ -3,7 +3,7 @@ from arcgis import features
 import pandas as pd
 from arcgis import geometry #use geometry module to project Long,Lat to X and Y
 from copy import copy
-from cooy import deepcopy
+from copy import deepcopy
 from datetime import datetime
 import configparser
 import os
