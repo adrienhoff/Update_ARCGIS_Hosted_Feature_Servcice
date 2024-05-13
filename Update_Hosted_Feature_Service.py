@@ -8,17 +8,14 @@ from datetime import datetime
 import configparser
 import os
 
-# Load portal auth configuration from config.ini
-config = configparser.ConfigParser()
-config.read('config.ini') #replace with your config file name
+#sign into portal via stored credentials
+def print_profile_info(gis):
+    print("Successfully logged into '{}' via the '{}' user".format(
+           gis.properties.portalHostname,
+           gis.properties.user.username)) 
 
-# Get portal URL, username, and password from the config file
-portal_url = config['portal']['url']
-username = config['portal']['username']
-password = config['portal']['password']
-
-# Initialize GIS object
-gis = GIS(portal_url, username, password)
+portal_gis = GIS(profile='python_portal_prof') #replace with the profile configuration name you created in your stored credential
+print_profile_info(portal_gis)
 
 #create query layer from SDE conection file
 with arcpy.EnvManager(scratchWorkspace=r"C:\GIS\Default.gdb", workspace=r"C:\GIS\Default.gdb"):
