@@ -1,150 +1,116 @@
 from arcgis.gis import GIS
-from arcgis import features
+from arcgis.features import GeoAccessor
 import pandas as pd
-from arcgis import geometry #use geometry module to project Long,Lat to X and Y
 from copy import copy
-from copy import deepcopy
-from datetime import datetime
+import time
 import configparser
-import os
+import pyodbc
+import geopandas as gpd
+from shapely.geometry import Point
+import numpy as np
 
-#sign into portal via stored credentials
-def print_profile_info(gis):
-    print("Successfully logged into '{}' via the '{}' user".format(
-           gis.properties.portalHostname,
-           gis.properties.user.username)) 
+# Define batch size
+batch_size = 100
 
-portal_gis = GIS(profile='python_portal_prof') #replace with the profile configuration name you created in your stored credential
-print_profile_info(portal_gis)
+while True:
+    start_time = time.time()
 
-#create query layer from SDE conection file
-with arcpy.EnvManager(scratchWorkspace=r"C:\GIS\Default.gdb", workspace=r"C:\GIS\Default.gdb"):
-    arcpy.management.MakeQueryLayer(r"your\connection\file", "your_output", "select * from DB_SCHEMA_TABLE", ...) #continue with your  values
-#create csv from query layer
-with arcpy.EnvManager(scratchWorkspace=r"C:\GIS\Default.gdb", workspace=r"C:\GIS\Default.gdb"):
-    arcpy.conversion.TableToTable("your_querylayer_output", "your_folder", "yourcsv.csv", '', ..) #continue with your values
+    # Load the config.ini file
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+
+    # Get the db credentials from the config file
+    # Retrieve connection parameters
+    server = config['database']['server']
+    database = config['database']['database']
+    username = config['database']['username']
+    password = config['database']['password']
+
+    conn_str = f'DRIVER=ODBC Driver 17 for SQL Server;SERVER={server};DATABASE={database};UID={username};PWD={password}'
+
+    print("Authenticated to db successfully!")
+
+    # Connect to the database
+    conn = pyodbc.connect(conn_str)
+
+    # Your SQL query
+    sql_query = (
+        f"SELECT * FROM your_table"
+    )
+
+    # Read data from SQL query into DataFrame
+    df = pd.read_sql(sql_query, conn)
+
+    # Convert Latitude, Longitude, and Altitude columns to numeric
+    df['Longitude'] = pd.to_numeric(df['Longitude'], errors='coerce')
+    df['Latitude'] = pd.to_numeric(df['Latitude'], errors='coerce')
+    df['Zvalue'] = pd.to_numeric(df['Zvalue'], errors='coerce')
+
+    # Convert Latitude, Longitude, Altitude to Point geometries
+    point_geometry = [Point(xy) if pd.notnull(xy[0]) else None for xy in zip(df['Longitude'], df['Latitude'], df['Zvalue'])]
+
+    # Create a GeoDataFrame
+    gdf = gpd.GeoDataFrame(df, geometry=point_geometry)
+    gdf.crs = 'EPSG:4326'  
+    gdf = gdf.to_crs(epsg=3857)
+
+    # Replace NaN values in the GeoDataFrame with None or empty strings
+    nan_replacements = {
+        'address': '',
+        'zip': '',
+        # Add other columns here
+    }
+
+    # Replace NaN values with None using NumPy
+    gdf = gdf.fillna(nan_replacements)
+
+    # Close DB connection
+    conn.close()
+
+    # Authenticate to ArcGIS Online or ArcGIS Enterprise
+    gis = GIS(profile='your_profile')
     
-csv1 = 'yourcsv.csv'
-df_1 = pd.read_csv(csv1)
-df_1.columns = df_1.columns.str.lower()
-df_1.head()
+    # Access the feature layer
+    item = gis.content.get("your_item_id")
+    feature_layer = item.layers[0]
 
-df_1.shape
+    # Query the feature layer
+    incident_fset = feature_layer.query() 
+    incident_df = incident_fset.sdf  
 
-item = gis.content.get("your feature item number")
-feature_layer = item.layers[0]
+    # Merge dataframes
+    overlap_rows = pd.merge(left=incident_df, right=gdf, how='inner', on='master_incident_number')
 
-incident_fset = feature_layer.query() # Querying without any conditions returns all the features
-print("Number of features returned by the query:", len(incident_fset.features))
-
-incident_df = incident_fset.sdf  # Convert feature set to pandas DataFrame
-incident_df.head()  # Display the first few rows of the DataFrame
-
-
-overlap_rows = pd.merge(left = incident_fset.sdf, right = df_1, how='inner',
-                       on = 'your_unique_id') #replace with uiq value
-print("Number of features overlapped:", len(overlap_rows))
-overlap_rows
-
-
-features_for_update = [] #list containing corrected features
-all_features = incident_fset.features
-all_features[0]
-
-
-for master_incident_number in overlap_rows['your_unique_id']:
-    original_feature = [f for f in all_features if f.attributes['your_unique_id'] == master_incident_number][0]
-    feature_to_be_updated = copy(original_feature)
-    
-    print(str(original_feature))
-    
-    # get the matching row from csv
-    matching_row = df_1[df_1['your_unique_id'] == master_incident_number].iloc[0]
-    
-
-    # Convert response_date to datetime object
-    response_date_str = matching_row['response_date']
-    response_date = datetime.strptime(response_date_str, '%m/%d/%Y %H:%M:%S')
-    
-    latitude = float(matching_row['latitude'])
-    longitude = float(matching_row['longitude'])
-    
-    #get geometries in the destination coordinate system
-    input_geometry = {'y': matching_row['latitude'], 'x': matching_row['longitude']}
-    output_geometry = geometry.project(geometries=[input_geometry], in_sr=4326, out_sr=incident_fset.spatial_reference['latestWkid'], gis=gis)
-    
-    # assign the updated values
-    feature_to_be_updated.geometry = output_geometry[0]    
-    feature_to_be_updated.attributes['address']=str(matching_row['address'])
-    #... continue with field map values
-    
-    features_for_update.append(feature_to_be_updated)
-                                                          
-                                                     
-
-feature_layer.edit_features(updates= features_for_update)
-
-#select those rows hat do not overlap 
-new_rows = df_1[~df_1['your_unique_id'].isin(overlap_rows['your_unique_id'])]
-print(new_rows.shape)
-new_rows.head()
-
-features_to_be_added = []
-print("Number of rows in new_rows:", len(new_rows))  # Diagnostic print statement
-
-if not new_rows.empty:
-    template_feature = deepcopy(features_for_update[0])
-    
-    for index, row in new_rows.iterrows():
-        new_feature = deepcopy(template_feature)
+    if not overlap_rows.empty:
+        features_for_update = [] 
         
-        # Access data in the Series using string indices
-        address = row['address']
-        #continue with field map
+        for i in range(0, len(overlap_rows), batch_size):
+            batch_rows = overlap_rows.iloc[i:i+batch_size]
+            
+            for master_incident_number in overlap_rows['master_incident_number']:
+                # Your update logic here
+                
+            # Print progress
+            print("Updating batch {} out of {} batches. Batch size: {}.".format((i//batch_size)+1, (len(overlap_rows)//batch_size)+1, len(batch_rows)))
 
-        # Assign the updated values
-        new_feature.attributes['address'] = address
-        #continue with field map
-
-        # Add this to the list of features to be added
-        features_to_be_added.append(new_feature)
-
-    print("Features to be added:", features_to_be_added)  # Diagnostic print statement
-    
-    if features_to_be_added:
-        feature_layer.edit_features(adds=features_to_be_added)
-        print("Features added successfully.")  # Diagnostic print statement
-
-print("End of adds update.")  # Diagnostic print statement
-
-
-# Now perform deletes
-print(incident_fset.sdf.shape) 
-delete_rows = incident_fset.sdf[~incident_fset.sdf['your_unique_id'].isin(overlap_rows['your_unique_id'])]
-
-print(delete_rows.shape)
-delete_rows.head()
-
-incident_fset = feature_layer.query()  # Querying without any conditions returns all the features
-print("Number of features returned by the query:", len(incident_fset.features))
-
-if not delete_rows.empty:
-    features_to_delete = [feature for feature in incident_fset.features if feature.attributes['your_unique_id'] in delete_rows['your_unique_id'].values]
-
-    if features_to_delete:
-        object_ids_to_delete = [feature.attributes['objectid'] for feature in features_to_delete]
-        print("Number of features selected for deletion:", len(features_to_delete))
-        print("OBJECTIDs to delete:", object_ids_to_delete)
-        delete_results = feature_layer.edit_features(deletes=object_ids_to_delete)
-        print(delete_results)
-        print("Features deleted successfully.")
+        print("All batches updated successfully.")
     else:
-        print("No features to delete.")
-else:
-    print("No features to delete.")
+        print("No features to update")
 
-incident_fset = feature_layer.query()  # Querying without any conditions returns all the features
-print("Number of features returned by the query:", len(incident_fset.features))
+    print("========================================================================")
 
+    # Select new rows
+    new_rows = gdf[~gdf['master_incident_number'].isin(incident_df['master_incident_number'])]
 
+    # Your logic for adding new features here
 
+    # Delete rows
+    delete_rows = incident_df[~incident_df['master_incident_number'].isin(gdf['master_incident_number'])]
+
+    # Your logic for deleting features here
+
+    end_time = time.time()
+    total_time = end_time - start_time
+    print("Total time taken for the script to run: {:.2f} seconds".format(total_time))
+
+    time.sleep(60)
