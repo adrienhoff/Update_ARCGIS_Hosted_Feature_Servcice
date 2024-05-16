@@ -79,7 +79,7 @@ while True:
     incident_df = incident_fset.sdf  
 
     # Merge dataframes
-    overlap_rows = pd.merge(left=incident_df, right=gdf, how='inner', on='master_incident_number')
+    overlap_rows = pd.merge(left=incident_df, right=gdf, how='inner', on='your_uid')
 
     if not overlap_rows.empty:
         features_for_update = [] 
@@ -100,14 +100,79 @@ while True:
     print("========================================================================")
 
     # Select new rows
-    new_rows = gdf[~gdf['master_incident_number'].isin(incident_df['master_incident_number'])]
+    new_rows = gdf[~gdf['your_uid'].isin(incident_df['your_uid'])]
 
-    # Your logic for adding new features here
+    print(new_rows.shape)
+    new_rows.head()
+
+
+    features_to_be_added = []
+    print("Number of rows in new_rows:", len(new_rows))  # Diagnostic print statement
+
+    for index, row in new_rows.iterrows():
+        new_feature = {
+            "attributes": {},  
+            "geometry": {
+                "x": row['geometry'].x,
+                "y": row['geometry'].y
+            }
+    }
+
+            
+        # Access data in the Series using string or int indices 
+        #example
+        address = row['address']
+        zip_code = str(row['zip'])
+        #continue with this logic for your other fields
+        
+        # Assign the updated values to attributes dictionary
+        new_feature["attributes"]['address'] = address
+        new_feature["attributes"]['zip'] = zip_code
+        #continue with this logic for your other fields
+
+
+        # Append this feature to the list of features to be added
+        features_to_be_added.append(new_feature)
+        
+
+    if features_to_be_added:
+        feature_layer.edit_features(adds=features_to_be_added)
+        print("Features added successfully.")  # Diagnostic print statement
+
+        incident_fset = feature_layer.query()  # Querying without any conditions returns all the features
+        print("Number of features after addition:", len(incident_fset.features))  # Check if features were added
+    else:
+        print("No features to add.")
+
 
     # Delete rows
-    delete_rows = incident_df[~incident_df['master_incident_number'].isin(gdf['master_incident_number'])]
+    incident_gdf.shape
+    delete_rows = incident_df[~incident_df['your_uid'].isin(gdf['your_uid'])]
 
-    # Your logic for deleting features here
+    #print(delete_rows.shape)
+    delete_rows.head()
+
+    incident_fset = feature_layer.query()  # Querying without any conditions returns all the features
+    print("Number of features returned by the query:", len(incident_fset.features))
+
+    if not delete_rows.empty:
+        features_to_delete = [feature for feature in incident_fset.features if feature.attributes['your_uid'] in delete_rows['master_incident_number'].values]
+
+        if features_to_delete:
+            object_ids_to_delete = [feature.attributes['objectid1'] for feature in features_to_delete]
+            print("Number of features selected for deletion:", len(features_to_delete))
+            print("OBJECTIDs to delete:", object_ids_to_delete)
+            delete_results = feature_layer.edit_features(deletes=object_ids_to_delete)
+            print(delete_results)
+            print("Features deleted successfully.")
+        else:
+            print("No features to delete.")
+    else:
+        print("No features to delete.")
+
+    incident_fset = feature_layer.query()  # Querying without any conditions returns all the features
+    print("Number of features returned by the query:", len(incident_fset.features))
+
 
     end_time = time.time()
     total_time = end_time - start_time
