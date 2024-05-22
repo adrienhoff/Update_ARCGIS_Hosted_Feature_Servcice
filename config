@@ -1,0 +1,5 @@
+[database]
+server = [your_db_server]
+database = [your_db]
+username = [your_user]
+password = [your_pw]
