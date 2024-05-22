@@ -12,3 +12,5 @@ For more information on storing local credentials: https://developers.arcgis.com
 Store both authentication files to a folder with secure access.
 
 Replace 'your_table', 'your_item_id', 'your_profile', and any other placeholders with your actual database table, feature layer ID, ArcGIS profile, etc. Make sure to fill in the update and delete logic according to your specific requirements.
+
+The bat file can be used to automate the process in NSSM.
